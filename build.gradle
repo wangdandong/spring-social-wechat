@@ -1,0 +1,101 @@
+buildscript {
+    repositories {
+        maven { url 'http://repo.spring.io/plugins-release' }
+    }
+    dependencies {
+        classpath 'io.spring.gradle:spring-io-plugin:0.0.4.RELEASE'
+        classpath 'me.champeau.gradle:gradle-javadoc-hotfix-plugin:0.1'
+    }
+}
+
+configure(allprojects) {
+    apply plugin: 'java'
+    apply plugin: 'eclipse'
+    apply plugin: 'idea'
+    apply plugin: 'javadocHotfix'
+
+    group = 'org.springframework.social'
+
+    sourceCompatibility = 1.5
+    targetCompatibility = 1.5
+
+    [compileJava, compileTestJava]*.options*.compilerArgs = ['-Xlint:none']
+
+    sourceSets.test.resources.srcDirs = ['src/test/resources', 'src/test/java']
+
+    test.systemProperty("java.awt.headless", "true")
+
+    repositories {
+        mavenLocal()
+        maven { url "http://repo.spring.io/libs-snapshot" }
+    }
+
+    dependencies {
+        testCompile "org.hamcrest:hamcrest-library:$hamcrestVersion"
+        testCompile "junit:junit:$junitVersion"
+        testCompile "org.mockito:mockito-all:$mockitoVersion"
+        testCompile "org.springframework:spring-test:$springVersion"
+    }
+
+    // servlet-api (2.5) and tomcat-servlet-api (3.0) classpath entries should not be
+    // exported to dependent projects in Eclipse to avoid false compilation errors due
+    // to changing APIs across these versions
+    eclipse.classpath.file.whenMerged { classpath ->
+        classpath.entries.findAll { entry -> entry.path.contains('servlet-api') }*.exported = false
+
+        // When the root project's name is the same as a dependency project's name, the name ends
+        // up being duplicated in the classpath entry. For example a dependency on "spring-social-wechat"
+        // would have a path of "/spring-social-wechat-spring-social-wechat".
+        // The following lines set the path properly in that case.
+        classpath.entries.findAll { entry ->
+            if (entry.path.equals("/" + rootProject.name + "-" + rootProject.name)) {
+                entry.path = "/" + rootProject.name;
+            }
+        }
+    }
+}
+
+configure(subprojects) { subproject ->
+    apply from: "${rootProject.projectDir}/publish-maven.gradle"
+
+    task sourcesJar(type: Jar, dependsOn: classes) {
+        classifier = 'sources'
+        from sourceSets.main.allJava
+    }
+
+    artifacts {
+        archives sourcesJar
+    }
+}
+
+
+project('spring-social-wechat') {
+    description = 'Spring Social Wechat'
+    dependencies {
+        compile("org.springframework.social:spring-social-core:$springSocialVersion")
+        compile("org.springframework.social:spring-social-config:$springSocialVersion")
+        compile("org.springframework.social:spring-social-security:$springSocialVersion", optional)
+        compile("com.fasterxml.jackson.core:jackson-core:$jacksonVersion")
+        compile("com.fasterxml.jackson.core:jackson-databind:$jacksonVersion")
+        compile("com.fasterxml.jackson.core:jackson-annotations:$jacksonVersion")
+        compile("javax.servlet:javax.servlet-api:$servletApiVersion", provided)
+        testCompile("org.springframework:spring-test:$springVersion")
+    }
+}
+
+configure(rootProject) {
+    description = 'Spring Social Wechat'
+
+    // don't publish the default jar for the root project
+    configurations.archives.artifacts.clear()
+
+    dependencies { // for integration tests
+    }
+
+    task wrapper(type: Wrapper) {
+        description = 'Generates gradlew[.bat] scripts'
+        gradleVersion = '1.11'
+    }
+
+}
+
